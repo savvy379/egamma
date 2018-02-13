@@ -6,7 +6,11 @@ import h5py
 import numpy as np
 
 # ROOT import(s)
-import root_numpy
+try:
+    import root_numpy
+except ImportError:
+    print "[WARN] ROOT and/or root_numpy are not installed. This might lead to problems."
+    pass
 
 # Command-line arguments parser
 import argparse
@@ -101,12 +105,12 @@ def downcast_type (x):
     assert False, "Unknown data type {} / {}".format(dtype, type_)
 
 
-def convert (array):
+def convert (data):
     """
     Method to convert standard array to suitable format for classifier.
 
     Arguments:
-        array: numpy array return by root_numpy.tree2array, to be formatted
+        data: numpy array return by root_numpy.tree2array, to be formatted
 
     Returns:
         Flatten numpy recarray prepared for saving to HDF5 file.
