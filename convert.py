@@ -21,7 +21,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description="Convert ROOT files with nested structure into flat HDF5 files.")
 
-parser.add_argument('--stop', action='store', default=None,
+parser.add_argument('--stop', action='store', default=None, type=int,
                     help='Maximum number of events to read.')
 parser.add_argument('--split', action='store', default=1000, type=int,
                     help='Target number of candidates per file.')
@@ -73,7 +73,6 @@ def main ():
     # Save as HDF5
     mkdir(args.outdir)
     if args.split > 0:
-        print "Samples:", data.shape[0], "| Split:", args.split
         idx = 0
         while idx == 0 or idx * args.split < data.shape[0]:
             data_split = data[idx * args.split:(idx + 1) * args.split]
