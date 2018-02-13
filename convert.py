@@ -7,10 +7,14 @@ import numpy as np
 
 # ROOT import(s)
 try:
+    import ROOT
     import root_numpy
 except ImportError:
     print "[WARN] ROOT and/or root_numpy are not installed. This might lead to problems."
     pass
+
+# Project import(s)
+from utils import *
 
 # Command-line arguments parser
 import argparse
@@ -21,9 +25,11 @@ parser.add_argument('--stop', action='store', default=None,
                     help='Maximum number of events to read.')
 parser.add_argument('--split', action='store', default=1000,
                     help='Target number of candidates per file.')
+parser.add_argument('--outdir', action='store', default="output", type=str,
+                    help='Output directory.')
 parser.add_argument('--shuffle', action='store_true', default=False,
                     help='Shuffle candidates before saving. (Requires reading entire dataset into memory.)')
-parser.add_argument('--paths', type=str, nargs='+',
+parser.add_argument('paths', type=str, nargs='+',
                     help='ROOT file(s) to be converted.')
 
 
@@ -34,7 +40,7 @@ def main ():
     args = parser.parse_args()
 
     # Validate arguments
-    if len(args.paths):
+    if not args.paths:
         print "No ROOT files were specified."
         return
 
@@ -42,10 +48,14 @@ def main ():
         args.stop = int(args.stop)
         pass
 
+    if not args.outdir.endswith('/'):
+        args.outdir += '/'
+        pass
+
     # Read data from all files.
     for path in args.paths:
         # Read numpy array from file.
-        f = TFile(path, 'READ')
+        f = ROOT.TFile(path, 'READ')
         t = f.Get('tree')
         array = root_numpy.tree2array(t, stop=args.stop)
 
@@ -62,17 +72,19 @@ def main ():
         pass
 
     # Save as HDF5
+    mkdir(args.outdir)
     if args.split > 0:
-        num_splits = data.shape[0] // args.split
-        splits = np.array_split(data, num_splits)
-        for idx, split in enumerate(splits):
-            with h5py.File('data_{:08d}.h5'.format(idx), 'w') as hf:
-                hf.create_dataset('egamma',  data=split)
+        idx = 0
+        while idx * args.split < data.shape[0]:
+            data_split = data[idx * args.split:(idx + 1) * args.split]
+            with h5py.File(args.outdir + 'data_{:08d}.h5'.format(idx), 'w') as hf:
+                hf.create_dataset('egamma',  data=data_split)
                 pass
+            idx += 1  # Increment counter
             pass
         pass
     else:
-        with h5py.File('data.h5', 'w') as hf:
+        with h5py.File(args.outdir + 'data.h5', 'w') as hf:
             hf.create_dataset('egamma',  data=data)
             pass
         pass
