@@ -21,9 +21,9 @@ import argparse
 
 parser = argparse.ArgumentParser(description="Convert ROOT files with nested structure into flat HDF5 files.")
 
-parser.add_argument('--stop', action='store', default=None,
+parser.add_argument('--stop', action='store', default=None, type=int,
                     help='Maximum number of events to read.')
-parser.add_argument('--split', action='store', default=1000,
+parser.add_argument('--split', action='store', default=1000, type=int,
                     help='Target number of candidates per file.')
 parser.add_argument('--outdir', action='store', default="output", type=str,
                     help='Output directory.')
@@ -68,15 +68,15 @@ def main ():
         except NameError:
             data = data_
             pass
-        print data.shape
         pass
 
     # Save as HDF5
     mkdir(args.outdir)
     if args.split > 0:
         idx = 0
-        while idx * args.split < data.shape[0]:
+        while idx == 0 or idx * args.split < data.shape[0]:
             data_split = data[idx * args.split:(idx + 1) * args.split]
+            print "Saving to {}".format(args.outdir + 'data_{:08d}.h5'.format(idx))
             with h5py.File(args.outdir + 'data_{:08d}.h5'.format(idx), 'w') as hf:
                 hf.create_dataset('egamma',  data=data_split)
                 pass
@@ -84,6 +84,7 @@ def main ():
             pass
         pass
     else:
+        print "Saving to {}".format(args.outdir + 'data.h5')
         with h5py.File(args.outdir + 'data.h5', 'w') as hf:
             hf.create_dataset('egamma',  data=data)
             pass
