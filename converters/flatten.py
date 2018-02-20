@@ -60,7 +60,7 @@ def main ():
         array = root_numpy.tree2array(t, stop=args.stop)
 
         # Convert to HDF5-ready format.
-        data_ = flatten(array)
+        data_ = convert_flatten(array)
 
         # Filter NaN/inf rows.
         is_bad = lambda matrix: np.any(np.isnan(matrix) | np.isinf(matrix))
@@ -126,7 +126,7 @@ def downcast_type (x):
     assert False, "Unknown data type {} / {}".format(dtype, type_)
 
 
-def flatten (data):
+def convert_flatten (data):
     """
     Method to convert standard array to suitable format for classifier.
 
