@@ -14,7 +14,7 @@ except ImportError:
     pass
 
 # Project import(s)
-from utils import *
+from egamma.utils import *
 
 # Command-line arguments parser
 import argparse
