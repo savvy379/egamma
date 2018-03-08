@@ -35,7 +35,7 @@ parser.add_argument('--max-processes', action='store', default=10, type=int,
 parser.add_argument('--outdir', action='store', default="images", type=str,
                     help='Output directory.')
 parser.add_argument('paths', type=str, nargs='+',
-                    help='ROOT file(s) to be converted.')
+                    help='HDF5 file(s) to be converted.')
 
 
 # Main function definition.
@@ -243,7 +243,7 @@ def convert_images (data, stop=None):
     features = list(features)
     
     # Get images dimensions in (eta, phi)
-    columns = [data[feat] for feat in features] + map(np.array, images)#
+    columns = [data[feat] for feat in features] + map(np.array, images)
     image_dims = [col.shape[1:] for col in columns[-len(images):]]
 
     # Construct compund dtype
