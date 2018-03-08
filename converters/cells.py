@@ -6,14 +6,18 @@ import re
 import h5py
 import json
 import numpy as np
+import logging as log
+import multiprocessing
 from subprocess import call
+
+log.basicConfig(format='[%(levelname)s] %(message)s', level=log.INFO)
 
 # ROOT import(s)
 try:
     import ROOT
     import root_numpy
 except ImportError:
-    print "[WARN] ROOT and/or root_numpy are not installed. This might lead to problems."
+    log.warning("ROOT and/or root_numpy are not installed. This might lead to problems.")
     pass
 
 # Project import(s)
@@ -28,7 +32,9 @@ parser.add_argument('--tag', action='store', type=str, required=True,
                     help='Tag the data category (Zee, Wev, etc.).')
 parser.add_argument('--stop', action='store', default=None, type=int,
                     help='Maximum number of events to read.')
-parser.add_argument('--outdir', action='store', default="output", type=str,
+parser.add_argument('--max-processes', action='store', default=10, type=int,
+                    help='Maximum number of concurrent processes to use.')
+parser.add_argument('--outdir', action='store', default="cells", type=str,
                     help='Output directory.')
 parser.add_argument('--shuffle', action='store_true', default=False,
                     help='Shuffle candidates before saving. (Requires reading entire dataset into memory.)')
@@ -44,7 +50,11 @@ def main ():
 
     # Validate arguments
     if not args.paths:
-        print "No ROOT files were specified."
+        log.error("No ROOT files were specified.")
+        return
+
+    if args.max_processes > 20:
+        log.error("The requested number of processes ({}) is excessive. Exiting.".format(args.max_processes))
         return
 
     if args.stop is not None:
@@ -57,44 +67,85 @@ def main ():
     
     args.paths = sorted(args.paths)
 
-    # Base selection
-    selection = ""  # E.g.: "(p_eta > -1.5 && p_eta < 1.5)"
+    # Batch the 
+    path_batches = map(list, np.array_split(args.paths, len(args.paths) // max(args.max_processes - 1, 1)))
 
-    # Read data from all files.
-    for ipath, path in enumerate(args.paths):
-        print "== {}".format(path)
-        if args.stop is not None:
-            print "   Reading {} samples.".format(stop)
+    for ibatch, path_batch in enumerate(path_batches):
+        log.info("Batch {} / {} files".format(ibatch + 1, len(path_batch)))
+        # Convert files using multiprocessing
+        processes = list()
+        for path in path_batch:
+            p = FileConverter(path, args)
+            processes.append(p)
             pass
-
-        # Read numpy array from file.
-        f = ROOT.TFile(path, 'READ')
-        t = f.Get('tree')
-        array = root_numpy.tree2array(t, stop=args.stop, selection=selection)
-
-        # Convert to HDF5-ready format.
-        data = convert_flatten(array)
-
-        # Filter NaN/inf rows.
-        is_bad = lambda matrix: np.any(np.isnan(matrix) | np.isinf(matrix))
-        for irow in range(data.shape[0]):
-            if True in map(is_bad, data[irow].tolist()):
-                print "Row {}/{} is bad!".format(irow, data.shape[0])
-                pass
+        
+        # Start processes
+        for p in processes:
+            p.start()
             pass
-
-        # Save as gzipped HDF5
-        mkdir(args.outdir)
-        filename = 'data_{}_{:08d}.h5'.format(args.tag, ipath)
-        print "   Saving to {}".format(args.outdir + filename)
-        with h5py.File(args.outdir + filename, 'w') as hf:
-            hf.create_dataset('egamma',  data=data, chunks=(1024,))
+        
+        # Wait for conversion processes to finish
+        for p in processes:
+            p.join()
             pass
-
         pass
 
     return
 
+
+class FileConverter (multiprocessing.Process):
+
+    def __init__(self, path, args):
+        """
+        Process converting standard-format ROOT file to HDF5 file with cell 
+        content.
+        
+        Arguments: 
+            path: Path to the ROOT file to be converted.
+            args: Namespace containing command-line arguments, to configure the
+                reading and writing of files.
+        """
+        # Base class constructor
+        super(FileConverter, self).__init__()
+
+        # Member variable(s)
+        self.__path = path
+        self.__args = args
+        return
+
+    def run (self):
+        # Printing
+        log.debug("Converting {}".format(self.__path))
+        if self.__args.stop is not None:
+            log.debug("  Reading {} samples.".format(stop))
+            pass
+        
+        # Base candidate selection
+        selection = "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+        
+        # Read numpy array from file.
+        f = ROOT.TFile(self.__path, 'READ')
+        t = f.Get('tree')
+        array = root_numpy.tree2array(t, stop=self.__args.stop, selection=selection)
+        
+        # Convert to HDF5-ready format.
+        data = convert_cells(array)
+
+        # Get current file index, assuming regular naming convetion.
+        index = int(re.search('\_([\d]+)\.myOutput', self.__path).group(1))  
+        
+        # Save as gzipped HDF5
+        mkdir(self.__args.outdir)
+        filename = 'cells_{}_{:08d}.h5'.format(self.__args.tag, index)
+        log.debug("  Saving to {}".format(self.__args.outdir + filename))
+        with h5py.File(self.__args.outdir + filename, 'w') as hf:
+            hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),), compression='gzip')
+            pass
+        call(['gzip', '-f', self.__args.outdir + filename])
+        return
+
+    pass
+    
 
 def downcast_type (x):
     """
@@ -121,7 +172,7 @@ def downcast_type (x):
     assert False, "Unknown data type {} / {}".format(dtype, type_)
 
 
-def convert_flatten (data):
+def convert_cells (data):
     """
     Method to convert standard array to suitable format for classifier.
 
