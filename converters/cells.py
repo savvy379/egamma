@@ -67,11 +67,13 @@ def main ():
     
     args.paths = sorted(args.paths)
 
-    # Batch the 
-    path_batches = map(list, np.array_split(args.paths, len(args.paths) // max(args.max_processes - 1, 1)))
+    # Batch the paths to be converted so as to never occupy more than 
+    # `max_processes`.
+    path_batches = map(list, np.array_split(args.paths, np.ceil(len(args.paths) / float(args.max_processes))))
 
+    # Loop batches of paths
     for ibatch, path_batch in enumerate(path_batches):
-        log.info("Batch {} / {} files".format(ibatch + 1, len(path_batch)))
+        log.info("Batch {}/{} | Contains {} files".format(ibatch + 1, len(path_batches), len(path_batch)))
         # Convert files using multiprocessing
         processes = list()
         for path in path_batch:
@@ -95,7 +97,7 @@ def main ():
 
 class FileConverter (multiprocessing.Process):
 
-    def __init__(self, path, args):
+    def __init__ (self, path, args):
         """
         Process converting standard-format ROOT file to HDF5 file with cell 
         content.
