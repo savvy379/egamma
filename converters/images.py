@@ -47,8 +47,10 @@ def main ():
         args.outdir += '/'
         pass
 
+    args.paths = sorted(args.paths)
+
     # Loop input paths
-    pattern = '.*\/data\_[\d]{8}\.h5(\.bz2)?$'  # (.../)data_[01234567].h5(.bz2)
+    pattern = '.*\/data\_([\w]+\_)?[\d]{8}\.h5(\.bz2)?$'  # (.../)data_([tag]_)[01234567].h5(.bz2)
     for path in args.paths:
         print "== {}".format(path)
 
@@ -70,17 +72,23 @@ def main ():
 
         # Read data
         with h5py.File(path, 'r') as hf:
-            data_ = hf['egamma'][:]
+            array = hf['egamma'][:]
             pass
         
         # Convert to images
-        data = convert_images(data_, stop=args.stop)
+        data = convert_images(array, stop=args.stop)
 
         # Save as HDF5
         mkdir(args.outdir)
-        with h5py.File(args.outdir + path.split('/')[-1].replace('data', 'images'), 'w') as hf:
-            hf.create_dataset('egamma',  data=data)
+        filename = path.split('/')[-1].replace('data', 'images')
+        print "   Saving to {}".format(args.outdir + filename)
+        with h5py.File(args.outdir + filename, 'w') as hf:
+            hf.create_dataset('egamma',  data=data, compression='gzip')
             pass
+
+        # Compress
+        #print "   Compressing"
+        #call(['bzip2', '-f', args.outdir + filename])
 
         # Clean up decompressed file.
         if unzip:
@@ -131,7 +139,7 @@ def convert_images (data, stop=None):
         # Ensure reasonable phi
         Phi  = phi.reshape((N,1)).repeat(N, axis=1)
         dPhi = np.abs(Phi - Phi.T)
-        if np.max(dPhi) > np.pi:  # Cluster wrapping around phi = ±π
+        if N > 0 and np.max(dPhi) > np.pi:  # Cluster wrapping around phi = ±π
             phi[phi < 0] += 2. * np.pi
             phi -= np.pi
             pass
@@ -162,16 +170,16 @@ def convert_images (data, stop=None):
         pass
 
     # Extract features to be propagated
-    truth_indices, truth_features = zip(*filter(lambda tup: tup[1].startswith('truth_'), enumerate(data.dtype.names)))
-    truth_features = list(truth_features)
+    indices, features = zip(*filter(lambda tup: not tup[1].startswith('cells_'), enumerate(data.dtype.names)))
+    features = list(features)
     
     # Get images dimensions in (eta, phi)
-    columns = [data[feat] for feat in truth_features] + map(np.array, images)#
+    columns = [data[feat] for feat in features] + map(np.array, images)#
     image_dims = [col.shape[1:] for col in columns[-len(images):]]
 
     # Construct compund dtype
-    names = truth_features + ['image_layer{}'.format(ilayer) for ilayer in range(len(images))]
-    formats = [data.dtype[idx].type for idx in truth_indices] + ['({},{})float32'.format(*dims) for dims in image_dims]
+    names = features + ['image_layer{}'.format(ilayer) for ilayer in range(len(images))]
+    formats = [data.dtype[idx].type for idx in indices] + ['({},{})float32'.format(*dims) for dims in image_dims]
     dtype = np.dtype(zip(names, formats))
 
     # Construct samples a list of tuples
@@ -179,7 +187,6 @@ def convert_images (data, stop=None):
 
     # Format as numpy.recarray
     output = np.array(samples, dtype=dtype)
-    print output.dtype.names
 
     return output
 

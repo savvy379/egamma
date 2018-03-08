@@ -63,6 +63,9 @@ def main ():
     # Read data from all files.
     for ipath, path in enumerate(args.paths):
         print "== {}".format(path)
+        if args.stop is not None:
+            print "   Reading {} samples.".format(stop)
+            pass
 
         # Read numpy array from file.
         f = ROOT.TFile(path, 'READ')
@@ -80,17 +83,13 @@ def main ():
                 pass
             pass
 
-        # Save as HDF5
+        # Save as gzipped HDF5
         mkdir(args.outdir)
         filename = 'data_{}_{:08d}.h5'.format(args.tag, ipath)
         print "   Saving to {}".format(args.outdir + filename)
         with h5py.File(args.outdir + filename, 'w') as hf:
-            hf.create_dataset('egamma',  data=data)
+            hf.create_dataset('egamma',  data=data, chunks=(1024,))
             pass
-
-        # Compress
-        print "   Compressing"
-        call(['bzip2', args.outdir + filename])
 
         pass
 
