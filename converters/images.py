@@ -187,7 +187,7 @@ def convert_images (data, stop=None):
         (0.025,     0.1),         # PS
         (0.003125,  0.0245 * 4),  # ECAL barrel layer 1
         (0.025,     0.0245),      # ...           ... 2
-        (0.025 * 4, 0.0245 * 4),  # ...
+        (0.025 * 2, 0.0245 * 2),  # ...
         ]
     dim = (0.20, 0.20)  # Storing (-dimx, dimx, -dimy, dimy) section of detector.
     ROOT.gROOT.SetBatch(True)
