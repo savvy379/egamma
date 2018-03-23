@@ -69,9 +69,9 @@ def main ():
     # Define variables
     num_gpus = 1  # Specify integer > 1 to run in parallel on GPUs
 
-    batch_size      = 32
-    steps_per_epoch =  2
-    epochs          = 50
+    batch_size      =  128
+    steps_per_epoch = 1000
+    epochs          =   50
 
     pattern = '{grp}/{grp}_{cls}*_00000*.h5'
 
