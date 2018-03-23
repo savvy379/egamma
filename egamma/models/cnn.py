@@ -149,7 +149,7 @@ def cnn_ (input_shapes, num_aux_features, name='egamma'):
         pass
 
     # Get task outputs
-    outputs = [task_network_(features, 1, 1, 'sigmoid',  name='task_PID'),     # PID
-               task_network_(features, 1, 1, 'softplus', name='task_energy')]  # Energy regression
-
+    outputs = [task_network_(features, 1, 1, 'sigmoid',  name='task_PID')]      # PID
+               #task_network_(features, 1, 1, 'softplus', name='task_energy')]  # Energy regression
+               # @TEMP: Energy regression is taken out for simplicity
     return Model(inputs, outputs, name=name)
