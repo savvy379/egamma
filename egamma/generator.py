@@ -215,16 +215,36 @@ class MixGenerator (Sequence):
 
         # Combine parts from all generators
         parts  = [gen[idx] for gen in self.generators]
-        labels = [np.ones((part.shape[0],)) * ipart for (ipart, part) in enumerate(parts)]
-        batch = np.concatenate(parts)
+        
+        # Check output from generator(s)
+        returns_list = isinstance(parts[0], (list, tuple))
+
+        # Output is list of numpy arrays:
+        if returns_list:
+            labels = [np.ones((part.shape[0],)) * ipart for (ipart, part) in enumerate(parts[0])]
+            batch = [np.concatenate(tuple(group), axis=0) for group in zip(*parts)]
+        else:
+            labels = [np.ones((part.shape[0],)) * ipart for (ipart, part) in enumerate(parts)]
+            batch = np.concatenate(parts)
+            pass
         label = np.concatenate(labels)
 
         # Shuffle samples
         if self.shuffle:
-            indices = np.arange(batch.shape[0])
+            if returns_list:
+                indices = np.arange(batch[0].shape[0])
+            else:
+                indices = np.arange(batch.shape[0])
+                pass
+
             np.random.shuffle(indices)
-            batch = batch[indices]
+
             label = label[indices]
+            if returns_list:
+                batch = [group[indices] for group in batch]
+            else:
+                batch = batch[indices]
+                pass
             pass
 
         # Return batch and, optionally, class labels
