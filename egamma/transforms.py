@@ -5,6 +5,7 @@ Utilities for transforming loaded data for different tasks.
 """
 
 # Basic import(s)
+import numpy as np
 from collections import namedtuple
 
 
@@ -71,9 +72,28 @@ def tf_flat (batch):
     return batch[feats]
 
 
+def tf_images (batch):
+    """
+    Select only features necessary to train/evaluate CNNs.
+
+    Arguments:
+        batch: numpy recarray read from HDF5 file
+
+    Returns:
+        ...
+    """
+
+    # Specify necessary features
+    feats = ['layer{:d}'.format(i) for i in range(4)]
+    feats = ['image_{}'.format(feat) for feat in feats]
+
+    images = [batch[feat] for feat in feats]
+    return [np.expand_dims(image, axis=-1) for image in images]
+
+
 # Disable direct imports
 __all__ = []
 
 # Create struct-type which is only instance to be imported
-TransformsStruct = namedtuple("TransformsStruct", "ATLAS flat")
-transforms = TransformsStruct(ATLAS=tf_ATLAS, flat=tf_flat)
+TransformsStruct = namedtuple("TransformsStruct", "ATLAS flat images")
+transforms = TransformsStruct(ATLAS=tf_ATLAS, flat=tf_flat, images=tf_images)
