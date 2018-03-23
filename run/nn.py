@@ -73,11 +73,11 @@ def main ():
     steps_per_epoch =  2
     epochs          = 50
 
-    pattern = 'data/{grp}/{typ}/{grp}_{cls}*_00000*.h5'
+    pattern = '{grp}/{grp}_{cls}*_00000*.h5'
 
     # Get data file paths
-    paths_sig = sorted(glob(pattern.format(grp='flat', typ='train', cls='Z')))[:1]
-    paths_bkg = sorted(glob(pattern.format(grp='flat', typ='train', cls='W')))[:1]
+    paths_sig = sorted(glob(pattern.format(grp='flat', cls='Z')))[:1]
+    paths_bkg = sorted(glob(pattern.format(grp='flat', cls='W')))[:1]
 
     # Create data generators for each class
     gen_train_sig = HDF5Generator(paths_sig, batch_size=batch_size // 2, transform=tf.flat, endless=True)
@@ -108,9 +108,10 @@ def main ():
     parallelised.compile(loss='binary_crossentropy', optimizer='adam')
 
     # Fit model
-    #parallelised.fit_generator(gen_train, steps_per_epoch=steps_per_epoch, epochs=epochs)
+    parallelised.fit_generator(gen_train, steps_per_epoch=steps_per_epoch, epochs=epochs)
 
     # Save model
+    mkdir('models/')
     nn.save('models/nn.h5')
     return 0
 
