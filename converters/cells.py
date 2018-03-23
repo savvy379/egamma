@@ -64,10 +64,10 @@ def main ():
     if not args.outdir.endswith('/'):
         args.outdir += '/'
         pass
-    
+
     args.paths = sorted(args.paths)
 
-    # Batch the paths to be converted so as to never occupy more than 
+    # Batch the paths to be converted so as to never occupy more than
     # `max_processes`.
     path_batches = map(list, np.array_split(args.paths, np.ceil(len(args.paths) / float(args.max_processes))))
 
@@ -80,12 +80,12 @@ def main ():
             p = FileConverter(path, args)
             processes.append(p)
             pass
-        
+
         # Start processes
         for p in processes:
             p.start()
             pass
-        
+
         # Wait for conversion processes to finish
         for p in processes:
             p.join()
@@ -99,10 +99,10 @@ class FileConverter (multiprocessing.Process):
 
     def __init__ (self, path, args):
         """
-        Process converting standard-format ROOT file to HDF5 file with cell 
+        Process converting standard-format ROOT file to HDF5 file with cell
         content.
-        
-        Arguments: 
+
+        Arguments:
             path: Path to the ROOT file to be converted.
             args: Namespace containing command-line arguments, to configure the
                 reading and writing of files.
@@ -121,21 +121,21 @@ class FileConverter (multiprocessing.Process):
         if self.__args.stop is not None:
             log.debug("  Reading {} samples.".format(stop))
             pass
-        
+
         # Base candidate selection
         selection = "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
-        
+
         # Read numpy array from file.
         f = ROOT.TFile(self.__path, 'READ')
         t = f.Get('tree')
         array = root_numpy.tree2array(t, stop=self.__args.stop, selection=selection)
-        
+
         # Convert to HDF5-ready format.
         data = convert_cells(array)
 
         # Get current file index, assuming regular naming convetion.
-        index = int(re.search('\_([\d]+)\.myOutput', self.__path).group(1))  
-        
+        index = int(re.search('\_([\d]+)\.myOutput', self.__path).group(1))
+
         # Save as gzipped HDF5
         mkdir(self.__args.outdir)
         filename = 'cells_{}_{:08d}.h5'.format(self.__args.tag, index)
@@ -147,7 +147,7 @@ class FileConverter (multiprocessing.Process):
         return
 
     pass
-    
+
 
 def downcast_type (x):
     """
@@ -186,7 +186,7 @@ def convert_cells (data):
     """
 
     # Load in variable names
-    with open('variables.json', 'r') as f:
+    with open('share/variables.json', 'r') as f:
         var_dict = json.load(f)
         pass
 
@@ -209,23 +209,23 @@ def convert_cells (data):
     # Dummy field
     v = pattern_scalar_in.format(scalars[0])
     for icand in range(len(data[v])):
-        
+
         # Candidate dict
         d = dict()
-        
+
         # Append scalars
         for key in scalars:
 
             # Get variables names
             var_in  = pattern_scalar_in .format(key)
             var_out = pattern_scalar_out.format(key)
-            
+
             # @FIXME: Hacky, but trying to improve the naming scheme a bit.
             var_out = regex.sub('probe_', var_out)
 
             # Store candidate data
             d[var_out] = data[var_in][icand]
-            
+
             # Add variable name
             if var_out not in variables:
                 variables.append(var_out)
@@ -233,7 +233,7 @@ def convert_cells (data):
                 assert icand > 0, "Variable {} ({}) set for first candidate.".format(var_out, var_in)
                 pass
             pass
-        
+
         # Append vectors
         for key in vectors:
 
@@ -243,7 +243,7 @@ def convert_cells (data):
 
             # Store candidate data
             d[var_out] = data[var_in][icand]
-            
+
             # Add variable name
             if var_out not in variables:
                 variables.append(var_out)
