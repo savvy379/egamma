@@ -22,8 +22,26 @@ import keras
 
 # Define SplitArray class
 class SplitArray (object):
-    """docstring for SplitArray."""
+
     def __init__ (self, arrays, batch_size=1, endless=False):
+        """
+        Generic abstraction class which contains a collection of iterable containers,
+        which it combines seamlessly to expose a single iterable container to the
+        user. The base container class is generic, and requires only `__len__` and
+        `__getitem__` methods; can by e.g. python list of h5py datasets.
+
+        If the batch_size is greater than one, depending on the type of the base
+        interable containers, there may be ambiguity in how to concatenate the parts
+        of a slice split accross multiple files. Python lists and tuple, are
+        concatenated as usual; otherwise `np.concatenate` is used.
+
+        Arguments:
+            arrays: List of iterable containers.
+            batch_size: Number of items from the container to return on each
+                `__getitem__` call.
+            endless: Whether to wrap the index around the base containers, i.e.
+                such that `sa[idx % len(sa)] == sa[idx]`.
+        """
         super(SplitArray, self).__init__()
 
         # Check(s)
@@ -32,9 +50,10 @@ class SplitArray (object):
         # Member variable(s)
         self.batch_size = batch_size
         self.endless = endless
-
         self.arrays = arrays
         self.ranges = [(0,len(array) - 1) for array in arrays]
+
+        # Compute beginning- and end indices for each base array.
         for idx in range(1, len(self.arrays)):
             offset = self.ranges[idx - 1][1] + 1
             self.ranges[idx] = (self.ranges[idx][0] + offset, self.ranges[idx][1] + offset)
@@ -95,8 +114,13 @@ class SplitArray (object):
 
             # Across-arrays
             else:
-                return np.concatenate((self.arrays[iarray_begin][ientry_begin:],
-                                       self.arrays[iarray_end]  [:ientry_end]))
+                output1 = self.arrays[iarray_begin][ientry_begin:]
+                output2 = self.arrays[iarray_end]  [:ientry_end]
+
+                if isinstance(output1, (list, tuple)):
+                    return output1 + output2
+                else:
+                    return np.concatenate((output1, output2))
                 pass
 
         # Not recognised
@@ -111,8 +135,18 @@ class Generator (keras.utils.Sequence, SplitArray):
 
     def __init__(self, paths, batch_size, endless=False, transform=lambda x:x):
         """
-        ...
+        Data generator class, based on `SplitArray`, suitable for training Keras
+        models using `fit_generator`.
+
+        Arguments:
+            paths: List of paths to HDF5 files to iterate through.
+            batch_size: See `SplitArray`.
+            endless: See `SplitArray`.
+            transform: The transform applied to batched read from the HDF5 files
+                by `SplitArray`. Useful for formatting the data for a particular
+                task (NN, CNN, etc.).
         """
+
         # Member variable(s)
         self.paths = paths
         self.transform = transform
@@ -145,8 +179,21 @@ class MixGenerator (keras.utils.Sequence):
 
     def __init__(self, *generators, **kwargs):
         """
-        ...
+        Generator class, combining the outputs from multiple generators,
+        allowing for concurrent reading different data sources, sample classes,
+        etc. Notice that the data class labels returns by the `MixGenerator` are
+        labelled such that the first generator corresponds to class `0`; the
+        second generator to class `1`; etc. Therefore, it is recommended to use
+        the [background, signal] ordering.
+
+        Arguments:
+            generators: List of generators to iterate through concurrently.
+            kwargs: Keyword arguments. Allowed values are:
+                return_class_label: Whether to return class label (see above) in
+                    addition to data. Default is `True`.
+                shuffle: Whether to shuffle data (and labels) befure returning.
         """
+
         accepted_keywords = ['return_class_label', 'shuffle']
         for kw in kwargs:
             if kw not in accepted_keywords:
