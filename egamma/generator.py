@@ -17,7 +17,7 @@ from subprocess import call
 log.basicConfig(format='[%(levelname)s] %(message)s', level=log.INFO)
 
 # Keras import(s)
-import keras
+from keras.utils import Sequence
 
 
 # Define SplitArray class
@@ -131,7 +131,7 @@ class SplitArray (object):
     pass
 
 
-class Generator (keras.utils.Sequence, SplitArray):
+class HDF5Generator (Sequence, SplitArray):
 
     def __init__(self, paths, batch_size, endless=False, transform=lambda x:x):
         """
@@ -155,7 +155,7 @@ class Generator (keras.utils.Sequence, SplitArray):
         self.datasets = [hf['egamma'] for hf in self.files]
 
         # Base class constructors
-        keras.utils.Sequence.__init__(self)
+        Sequence.__init__(self)
         SplitArray.__init__(self, self.datasets, batch_size=batch_size, endless=endless)
 
         print "Generator: Created with {} datasets".format(len(self.datasets))
@@ -175,7 +175,7 @@ class Generator (keras.utils.Sequence, SplitArray):
     pass
 
 
-class MixGenerator (keras.utils.Sequence):
+class MixGenerator (Sequence):
 
     def __init__(self, *generators, **kwargs):
         """
