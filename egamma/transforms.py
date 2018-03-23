@@ -4,7 +4,9 @@
 Utilities for transforming loaded data for different tasks.
 """
 
+# Basic import(s)
 from collections import namedtuple
+
 
 def regularise (tf):
     """
@@ -49,6 +51,7 @@ def tf_ATLAS (batch):
 
     return batch[feats]
 
+
 @regularise
 def tf_flat (batch):
     """
@@ -66,6 +69,7 @@ def tf_flat (batch):
     feats = ['probe_{}'.format(feat) for feat in feats]
 
     return batch[feats]
+
 
 # Disable direct imports
 __all__ = []
