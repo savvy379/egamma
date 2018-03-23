@@ -94,7 +94,8 @@ def main ():
     nn = nn_(X.shape[1])
 
     # Plot model diagram
-    plot_model(nn, to_file='nn.png', show_shapes=True)
+    mkdir('figures/')
+    plot_model(nn, to_file='figures/nn.png', show_shapes=True)
 
     # Parallelise model
     if torch.cuda.is_available() and num_gpus > 1:
