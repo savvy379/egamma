@@ -1,4 +1,4 @@
-name: egamma
+name: egamma-cpu
 channels:
 - defaults
 - anaconda
