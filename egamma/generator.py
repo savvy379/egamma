@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Utilities for multiprocess loading of data files.
+Utilities for cross-file loading of data.
 """
 
 # Basic import(s)
@@ -107,27 +107,6 @@ class SplitArray (object):
     pass
 
 
-# Preprocessing transforms
-def tf_ATLAS (batch):
-    """
-    ...
-    """
-    feats = ['LHValue']
-    feats = ['probe_{}'.format(feat) for feat in feats]
-
-    return batch[feats].astype([(feat, '<f8') for feat in feats]).view('<f8').reshape((batch.size, len(feats)))
-
-
-def tf_flat (batch):
-    """
-    ...
-    """
-    feats = ['Rhad1', 'Rhad', 'f3', 'weta2', 'Rphi', 'Reta', 'Eratio', 'f1']
-    feats = ['probe_{}'.format(feat) for feat in feats]
-
-    return batch[feats].astype([(feat, '<f8') for feat in feats]).view('<f8').reshape((batch.size, len(feats)))
-
-
 class Generator (keras.utils.Sequence, SplitArray):
 
     def __init__(self, paths, batch_size, endless=False, transform=lambda x:x):
@@ -152,7 +131,7 @@ class Generator (keras.utils.Sequence, SplitArray):
         return SplitArray.__len__(self)
 
     def __getitem__ (self, idx):
-        return SplitArray.__getitem__(self, idx)
+        return self.transform(SplitArray.__getitem__(self, idx))
 
     def __del__(self):
         for f in self.files:
