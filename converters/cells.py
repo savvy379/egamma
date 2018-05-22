@@ -65,88 +65,68 @@ def main ():
         args.outdir += '/'
         pass
 
+    if args.shuffle:
+        raise NotImplemented()
+
     args.paths = sorted(args.paths)
 
-    # Batch the paths to be converted so as to never occupy more than
-    # `max_processes`.
-    path_batches = map(list, np.array_split(args.paths, np.ceil(len(args.paths) / float(args.max_processes))))
+    for path in args.paths:
 
-    # Loop batches of paths
-    for ibatch, path_batch in enumerate(path_batches):
-        log.info("Batch {}/{} | Contains {} files".format(ibatch + 1, len(path_batches), len(path_batch)))
-        # Convert files using multiprocessing
-        processes = list()
-        for path in path_batch:
-            p = FileConverter(path, args)
-            processes.append(p)
-            pass
+        # Base candidate selection
+        selection = None  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
 
-        # Start processes
-        for p in processes:
-            p.start()
-            pass
+        # Read numpy array from file.
+        f = ROOT.TFile(path, 'READ')
+        tree = f.Get('tree')
 
-        # Wait for conversion processes to finish
-        for p in processes:
-            p.join()
+        # Split indices into batches
+        N = min(1000000, tree.GetEntries())  # @TEMP
+        index_edges = map(int, np.linspace(0, N, args.max_processes + 1, endpoint=True))
+        index_ranges = zip(index_edges[:-1], index_edges[1:])
+
+        # Start conversion process(es)
+        pool = multiprocessing.Pool(processes=args.max_processes)
+        results = pool.map(converter, [(path, start, stop, selection) for (start, stop) in index_ranges])
+
+        # Concatenate data
+        data = np.concatenate(results)
+        print data.shape
+
+        # Save as gzipped HDF5
+        mkdir(args.outdir)
+        filename = 'cells_{}.h5'.format(args.tag)
+        log.debug("  Saving to {}".format(args.outdir + filename))
+        with h5py.File(args.outdir + filename, 'w') as hf:
+            hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),), compression='gzip')
             pass
+        call(['gzip', '-f', args.outdir + filename])
         pass
 
     return
 
 
-class FileConverter (multiprocessing.Process):
+def converter (arguments):
+    """
+    Process converting standard-format ROOT file to HDF5 file with cell
+    content.
 
-    def __init__ (self, path, args):
-        """
-        Process converting standard-format ROOT file to HDF5 file with cell
-        content.
+    Arguments:
+        path: Path to the ROOT file to be converted.
+        args: Namespace containing command-line arguments, to configure the
+            reading and writing of files.
+    """
 
-        Arguments:
-            path: Path to the ROOT file to be converted.
-            args: Namespace containing command-line arguments, to configure the
-                reading and writing of files.
-        """
-        # Base class constructor
-        super(FileConverter, self).__init__()
+    # Unpack arguments
+    path, start, stop, selection = arguments
 
-        # Member variable(s)
-        self.__path = path
-        self.__args = args
-        return
+    # Read-in data from ROOT.TTree
+    array = root_numpy.root2array(path, 'tree', start=start, stop=stop, selection=selection)
 
-    def run (self):
-        # Printing
-        log.debug("Converting {}".format(self.__path))
-        if self.__args.stop is not None:
-            log.debug("  Reading {} samples.".format(stop))
-            pass
+    # Convert to HDF5-ready format.
+    data = convert_cells(array)
 
-        # Base candidate selection
-        selection = "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
-
-        # Read numpy array from file.
-        f = ROOT.TFile(self.__path, 'READ')
-        t = f.Get('tree')
-        array = root_numpy.tree2array(t, stop=self.__args.stop, selection=selection)
-
-        # Convert to HDF5-ready format.
-        data = convert_cells(array)
-
-        # Get current file index, assuming regular naming convetion.
-        index = int(re.search('\_([\d]+)\.myOutput', self.__path).group(1))
-
-        # Save as gzipped HDF5
-        mkdir(self.__args.outdir)
-        filename = 'cells_{}_{:08d}.h5'.format(self.__args.tag, index)
-        log.debug("  Saving to {}".format(self.__args.outdir + filename))
-        with h5py.File(self.__args.outdir + filename, 'w') as hf:
-            hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),), compression='gzip')
-            pass
-        call(['gzip', '-f', self.__args.outdir + filename])
-        return
-
-    pass
+    # Store result in shared dict
+    return data
 
 
 def downcast_type (x):
@@ -164,7 +144,10 @@ def downcast_type (x):
     dtype = str(x.dtype)
     type_ = str(type(x))
     if 'ndarray' in type_:
-        return h5py.special_dtype(vlen=downcast_type(x[0]))
+        try:
+            return h5py.special_dtype(vlen=downcast_type(x[0]))
+        except:
+            return h5py.special_dtype(vlen=np.float32)
     elif 'float' in dtype:
         return np.float32
     elif 'int'   in dtype:
@@ -190,75 +173,47 @@ def convert_cells (data):
         var_dict = json.load(f)
         pass
 
-    scalars = var_dict['scalars']
-    vectors = var_dict['vectors']
-
-    # Define variable name transforms
-    pattern_scalar_in  = '{}'
-    pattern_scalar_out = '{}'
-
-    pattern_vector_in  = 'pX_{}_Cells'
-    pattern_vector_out = 'cells_{}'
-
-    regex = re.compile('^p(X)?\_')   # Prettify probe variable names
+    scalars = map(str, var_dict['scalars'])
+    vectors = map(str, var_dict['vectors'])
 
     # Result containers
     candidates = list()
     variables  = list()
 
     # Dummy field
-    v = pattern_scalar_in.format(scalars[0])
+    v = scalars[0]
     for icand in range(len(data[v])):
 
         # Candidate dict
         d = dict()
 
         # Append scalars
-        for key in scalars:
-
-            # Get variables names
-            var_in  = pattern_scalar_in .format(key)
-            var_out = pattern_scalar_out.format(key)
-
-            # @FIXME: Hacky, but trying to improve the naming scheme a bit.
-            var_out = regex.sub('probe_', var_out)
+        for key in scalars + vectors:
 
             # Store candidate data
-            d[var_out] = data[var_in][icand]
+            d[key] = data[key][icand]
 
             # Add variable name
-            if var_out not in variables:
-                variables.append(var_out)
+            if key not in variables:
+                variables.append(key)
             else:
-                assert icand > 0, "Variable {} ({}) set for first candidate.".format(var_out, var_in)
-                pass
-            pass
-
-        # Append vectors
-        for key in vectors:
-
-            # Get variables names
-            var_in  = pattern_vector_in .format(key)
-            var_out = pattern_vector_out.format(key)
-
-            # Store candidate data
-            d[var_out] = data[var_in][icand]
-
-            # Add variable name
-            if var_out not in variables:
-                variables.append(var_out)
-            else:
-                assert icand > 0, "Variable {} ({}) set for first candidate.".format(var_out, var_in)
+                assert icand > 0, "Variable {0} ({0}) set for first candidate.".format(key)
                 pass
             pass
 
         # Append candidate to output
         candidates.append(d)
         pass
-    pass
 
     # Format output as numpy structured arrays.
     formats = [downcast_type(candidates[0][var]) for var in variables]
+    for pair in zip(variables, formats):
+        try:
+            np.dtype([pair])
+        except:
+            print "Problem for {}".format(pair)
+            pass
+        pass
     dtype  = np.dtype(zip(variables, formats))
     output = np.array([tuple([d[var] for var in variables]) for d in candidates], dtype=dtype)
 

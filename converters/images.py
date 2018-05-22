@@ -110,7 +110,8 @@ class FileConverter (multiprocessing.Process):
             pass
 
         # Check(s)
-        pattern = '.*\/cells\_([\w]+\_)?[\d]{8}\.h5(\.gz)?$'  # (.../)cells_([tag]_)[01234567].h5(.gz)
+        #pattern = '.*\/cells\_([\w]+\_)?[\d]{8}\.h5(\.gz)?$'  # (.../)cells_([tag]_)[01234567].h5(.gz)
+        pattern = '.*\/cells\_([\w]+)\.h5(\.gz)?$'  # (.../)cells_([tag]_)[01234567].h5(.gz)
         assert os.path.isfile(self.__path),    "File {} doesn't exist.".format(self.__path)
         assert re.match(pattern, self.__path), "File {} is not supported.".format(self.__path)
 
@@ -123,7 +124,7 @@ class FileConverter (multiprocessing.Process):
                 call(['bzip2', '-dkc', self.__path], stdout=stdout)
                 pass
             remove = True
-            
+
         # Compressed with gzip
         elif self.__path.endswith('.gz'):
             path_hdf5 = self.__path.replace('.gz', '')
@@ -133,11 +134,11 @@ class FileConverter (multiprocessing.Process):
                 call(['gunzip', '-c', self.__path], stdout=stdout)
                 pass
             remove = True
-            
+
         # Uncompressed
         elif self.__path.endswith('.h5'):
             path_hdf5 = self.__path
-            
+
         # Unsupported
         else:
             log.warning("Path {} not supported.".format(self.__path))
@@ -147,7 +148,7 @@ class FileConverter (multiprocessing.Process):
         with h5py.File(path_hdf5, 'r') as hf:
             array  = hf['egamma'][:]
             pass
-        
+
         # Convert to images
         data = convert_images(array, stop=self.__args.stop)
 
@@ -196,10 +197,10 @@ def convert_images (data, stop=None):
     images = [[] for _ in range(4)]
     for irow in range(stop):
         # Get arrays
-        sampling = data[irow]['cells_sampling']
-        eta      = data[irow]['cells_eta']
-        energy   = data[irow]['cells_energy']
-        phi      = data[irow]['cells_phi']
+        sampling = data[irow]['p_cell_sampling']
+        eta      = data[irow]['p_cell_eta']
+        energy   = data[irow]['p_cell_energy']
+        phi      = data[irow]['p_cell_phi']
 
         # Number of cells
         N = energy.size
@@ -239,9 +240,9 @@ def convert_images (data, stop=None):
         pass
 
     # Extract features to be propagated
-    indices, features = zip(*filter(lambda tup: not tup[1].startswith('cells_'), enumerate(data.dtype.names)))
+    indices, features = zip(*filter(lambda tup: not tup[1].startswith('p_cell_') and not tup[1].startswith('tracks_'), enumerate(data.dtype.names)))
     features = list(features)
-    
+
     # Get images dimensions in (eta, phi)
     columns = [data[feat] for feat in features] + map(np.array, images)
     image_dims = [col.shape[1:] for col in columns[-len(images):]]
@@ -249,6 +250,13 @@ def convert_images (data, stop=None):
     # Construct compund dtype
     names = features + ['image_layer{}'.format(ilayer) for ilayer in range(len(images))]
     formats = [data.dtype[idx].type for idx in indices] + ['({},{})float32'.format(*dims) for dims in image_dims]
+
+    # -- @TEMP Filter out branches with `numpy.object_` type.
+    good_indices = [ix for ix in range(len(formats)) if formats[ix] != np.object_]
+    columns = [columns[ix] for ix in good_indices]
+    names   = [names  [ix] for ix in good_indices]
+    formats = [formats[ix] for ix in good_indices]
+
     dtype = np.dtype(zip(names, formats))
 
     # Construct samples a list of tuples
