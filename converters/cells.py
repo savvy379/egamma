@@ -73,7 +73,10 @@ def main ():
     for path in args.paths:
 
         # Base candidate selection
-        selection = None  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+        if args.tag == 'Zee':
+            selection = "(p_truth_pdgId == 11 && p_truth_parent_pdgId == 23 && tag_2_exists == 0)"
+        else:
+            selection = "(p_truth_parent_pdgId == 23 && tag_2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
 
         # Read numpy array from file.
         f = ROOT.TFile(path, 'READ')
