@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 # Basic import(s)
 import re
 import h5py
@@ -74,9 +77,9 @@ def main ():
 
         # Base candidate selection
         if args.tag == 'Zee':
-            selection = "(p_truth_pdgId == 11 && p_truth_parent_pdgId == 23 && tag_2_exists == 0)"
+            selection = "(p_truth_pdgId == 11 && p_truth_parent_pdgId == 23 && tag2_exists == 0)"
         else:
-            selection = "(p_truth_parent_pdgId == 23 && tag_2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+            selection = "(p_truth_parent_pdgId == 23 && tag2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
 
         # Read numpy array from file.
         f = ROOT.TFile(path, 'READ')
