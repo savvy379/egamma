@@ -73,13 +73,17 @@ def main ():
 
     args.paths = sorted(args.paths)
 
+    pool = multiprocessing.Pool(processes=args.max_processes)
+    counter = 0
     for path in args.paths:
 
         # Base candidate selection
         if args.tag == 'Zee':
-            selection = "(p_truth_pdgId == 11 && p_truth_parent_pdgId == 23 && tag2_exists == 0)"
+            #selection = "(abs(p_truth_pdgId) == 11 && abs(p_truth_parent_pdgId) == 23 && tag2_exists == 0)"
+            selection = "(tag2_exists == 0)"
         else:
-            selection = "(p_truth_parent_pdgId == 23 && tag2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+            #selection = "(p_truth_parent_pdgId == 23 && tag2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+            selection = "(tag2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
 
         # Read numpy array from file.
         f = ROOT.TFile(path, 'READ')
@@ -91,21 +95,25 @@ def main ():
         index_ranges = zip(index_edges[:-1], index_edges[1:])
 
         # Start conversion process(es)
-        pool = multiprocessing.Pool(processes=args.max_processes)
         results = pool.map(converter, [(path, start, stop, selection) for (start, stop) in index_ranges])
 
         # Concatenate data
         data = np.concatenate(results)
         print data.shape
 
+        if len(data) == 0:
+            print "Something's wrong. Exiting."
+            return
+
         # Save as gzipped HDF5
         mkdir(args.outdir)
-        filename = 'cells_{}.h5'.format(args.tag)
+        filename = 'cells_{}_{:04d}.h5'.format(args.tag,counter)
+        counter += 1
         log.debug("  Saving to {}".format(args.outdir + filename))
         with h5py.File(args.outdir + filename, 'w') as hf:
             hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),), compression='gzip')
             pass
-        call(['gzip', '-f', args.outdir + filename])
+        #call(['gzip', '-f', args.outdir + filename])
         pass
 
     return
