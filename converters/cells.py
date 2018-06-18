@@ -41,6 +41,10 @@ parser.add_argument('--outdir', action='store', default="cells", type=str,
                     help='Output directory.')
 parser.add_argument('--shuffle', action='store_true', default=False,
                     help='Shuffle candidates before saving. (Requires reading entire dataset into memory.)')
+parser.add_argument('--max-input-files', action='store', default=0, type=int,
+                    help='Use at most X files. Default is all.')
+parser.add_argument('--combine', action='store_true', default=False,
+                    help='Combine all inputs to one output file.')
 parser.add_argument('paths', type=str, nargs='+',
                     help='ROOT file(s) to be converted.')
 
@@ -74,12 +78,18 @@ def main ():
     args.paths = sorted(args.paths)
 
     pool = multiprocessing.Pool(processes=args.max_processes)
-    counter = 0
+    counter = -1
+    full_data = []
     for path in args.paths:
+        counter += 1
+        if args.max_input_files > 0 and counter >= args.max_input_files:
+            break
 
         # Base candidate selection
         if args.tag == 'Zee':
             #selection = "(abs(p_truth_pdgId) == 11 && abs(p_truth_parent_pdgId) == 23 && tag2_exists == 0)"
+            #selection = "(tag2_exists == 0 && p_isElectron == 1 && p_TruthType == 2 && p_TruthOrigin == 13)"
+            #selection = "(tag2_exists == 0 && p_isElectron == 1 && p_TruthType == 2 && p_truth_parent_pdgId == 23)"
             selection = "(tag2_exists == 0)"
         else:
             #selection = "(p_truth_parent_pdgId == 23 && tag2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
@@ -105,16 +115,27 @@ def main ():
             print "Something's wrong. Exiting."
             return
 
+        if args.combine:
+            full_data.append(data)
+            continue
+
         # Save as gzipped HDF5
         mkdir(args.outdir)
         filename = 'cells_{}_{:04d}.h5'.format(args.tag,counter)
-        counter += 1
         log.debug("  Saving to {}".format(args.outdir + filename))
         with h5py.File(args.outdir + filename, 'w') as hf:
             hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),), compression='gzip')
             pass
         #call(['gzip', '-f', args.outdir + filename])
         pass
+
+    if args.combine:
+        data = np.concatenate(full_data)
+        mkdir(args.outdir)
+        filename = 'cells_{}_combined.h5'.format(args.tag)
+        log.debug("  Saving to {}".format(args.outdir + filename))
+        with h5py.File(args.outdir + filename, 'w') as hf:
+            hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),), compression='gzip')
 
     return
 
