@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 # Basic import(s)
 import re
 import h5py
@@ -9,6 +12,7 @@ import numpy as np
 import logging as log
 import multiprocessing
 from subprocess import call
+import pandas as pd
 
 log.basicConfig(format='[%(levelname)s] %(message)s', level=log.INFO)
 
@@ -38,10 +42,14 @@ parser.add_argument('--outdir', action='store', default="cells", type=str,
                     help='Output directory.')
 parser.add_argument('--shuffle', action='store_true', default=False,
                     help='Shuffle candidates before saving. (Requires reading entire dataset into memory.)')
+parser.add_argument('--max-input-files', action='store', default=0, type=int,
+                    help='Use at most X files. Default is all.')
+parser.add_argument('--combine', action='store_true', default=False,
+                    help='Combine all inputs to one output file.')
 parser.add_argument('paths', type=str, nargs='+',
                     help='ROOT file(s) to be converted.')
 
-
+test_data=None
 # Main function definition.
 def main ():
 
@@ -60,6 +68,8 @@ def main ():
     if args.stop is not None:
         args.stop = int(args.stop)
         pass
+    else:
+        args.stop = 1000000
 
     if not args.outdir.endswith('/'):
         args.outdir += '/'
@@ -70,40 +80,74 @@ def main ():
 
     args.paths = sorted(args.paths)
 
+    pool = multiprocessing.Pool(processes=args.max_processes)
+    counter = -1
+    full_data = []
     for path in args.paths:
+        counter += 1
+        if args.max_input_files > 0 and counter >= args.max_input_files:
+            break
 
         # Base candidate selection
         if args.tag == 'Zee':
-            selection = "(p_truth_pdgId == 11 && p_truth_parent_pdgId == 23 && tag_2_exists == 0)"
+            #selection = "(abs(p_truth_pdgId) == 11 && abs(p_truth_parent_pdgId) == 23 && tag2_exists == 0)"
+            #selection = "(tag2_exists == 0 && p_isElectron == 1 && p_TruthType == 2 && p_TruthOrigin == 13)"
+            #selection = "(tag2_exists == 0 && p_isElectron == 1 && p_TruthType == 2 && p_truth_parent_pdgId == 23)"
+            #selection = "(tag2_exists == 0)"
+            selection = "(tag2_exists == 0 && tag_type == 1 && p_isElectron == 1)"
         else:
-            selection = "(p_truth_parent_pdgId == 23 && tag_2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+            #selection = "(p_truth_parent_pdgId == 23 && tag2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+            #selection = "(tag2_exists == 0)"  # "(p_truth_eta > -1.5 && p_truth_eta < 1.5)"
+            selection = "(tag2_exists == 0 && p_isElectron == 1)"
 
         # Read numpy array from file.
         f = ROOT.TFile(path, 'READ')
         tree = f.Get('tree')
 
         # Split indices into batches
-        N = min(1000000, tree.GetEntries())  # @TEMP
+        N = min(args.stop, tree.GetEntries())  # @TEMP
         index_edges = map(int, np.linspace(0, N, args.max_processes + 1, endpoint=True))
         index_ranges = zip(index_edges[:-1], index_edges[1:])
 
         # Start conversion process(es)
-        pool = multiprocessing.Pool(processes=args.max_processes)
         results = pool.map(converter, [(path, start, stop, selection) for (start, stop) in index_ranges])
 
         # Concatenate data
         data = np.concatenate(results)
-        print data.shape
+        print(data.shape)
+        global test_data
+        test_data=data
+
+        if len(data) == 0:
+            print("Something's wrong. Exiting.")
+            return
+
+        if args.combine:
+            full_data.append(data)
+            continue
 
         # Save as gzipped HDF5
         mkdir(args.outdir)
-        filename = 'cells_{}.h5'.format(args.tag)
+        filename = 'cells_{}_{:04d}.h5'.format(args.tag,counter)
         log.debug("  Saving to {}".format(args.outdir + filename))
+        # df = pd.DataFrame(data[:]) #pandas
         with h5py.File(args.outdir + filename, 'w') as hf:
-            hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),), compression='gzip')
+            hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),))#, compression='gzip')
+            # hf.create_dataset(args.tag, data=df.to_records(index=False), compression=None) #pandas
             pass
-        call(['gzip', '-f', args.outdir + filename])
+        #call(['gzip', '-f', args.outdir + filename])
         pass
+
+    if args.combine:
+        pass
+        data = np.concatenate(full_data)
+        mkdir(args.outdir)
+        filename = 'cells_{}_combined.h5'.format(args.tag)
+        log.debug("  Saving to {}".format(args.outdir + filename))
+        # df = pd.DataFrame(data[:]) #pandas
+        with h5py.File(args.outdir + filename, 'w') as hf:
+            hf.create_dataset('egamma',  data=data, chunks=(min(1024, data.shape[0]),))#, compression='gzip')
+            # hf.create_dataset(args.tag, data=df.to_records(index=False), compression=None) #pandas
 
     return
 
@@ -214,7 +258,7 @@ def convert_cells (data):
         try:
             np.dtype([pair])
         except:
-            print "Problem for {}".format(pair)
+            print("Problem for {}".format(pair))
             pass
         pass
     dtype  = np.dtype(zip(variables, formats))

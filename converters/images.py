@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 # Basic import(s)
 import re
 import os
@@ -115,6 +118,8 @@ class FileConverter (multiprocessing.Process):
         assert os.path.isfile(self.__path),    "File {} doesn't exist.".format(self.__path)
         assert re.match(pattern, self.__path), "File {} is not supported.".format(self.__path)
 
+        remove = False
+
         # Compressed with bzip2
         if self.__path.endswith('.bz2'):
             path_hdf5 = self.__path.replace('.bz2', '')
@@ -188,7 +193,7 @@ def convert_images (data, stop=None):
         (0.025,     0.1),         # PS
         (0.003125,  0.0245 * 4),  # ECAL barrel layer 1
         (0.025,     0.0245),      # ...           ... 2
-        (0.025 * 2, 0.0245 * 2),  # ...
+        (0.025 * 2, 0.0245),      # ...
         ]
     dim = (0.20, 0.20)  # Storing (-dimx, dimx, -dimy, dimy) section of detector.
     ROOT.gROOT.SetBatch(True)
